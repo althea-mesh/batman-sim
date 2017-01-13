@@ -1,6 +1,6 @@
 // @flow
 const TM = 1000
-
+const HOP_PENALTY = 0.058
 /*::
 
 type Network = {
@@ -46,36 +46,61 @@ type OGM = {
 
 */
 
-//   A--B
+
+//  /- B --> C -\
+// A             F
+//  \- D <-- E -/
+
 let modelNetwork = {
   nodes: {
     A: {},
-    B: {}
+    B: {},
+    C: {},
+    D: {},
+    E: {},
+    F: {}
   },
   edges: {
     'B->A': { throughput: 10 },
-    'A->B': { throughput: 10 }
+    'A->B': { throughput: 10 },
+
+    'A->D': { throughput: 10 },
+    'D->A': { throughput: 10 },
+
+    'B->C': { throughput: 10 },
+    'C->B': { throughput: 5 },
+
+    'D->E': { throughput: 5 },
+    'E->D': { throughput: 10 },
+
+    'C->F': { throughput: 10 },
+    'F->C': { throughput: 10 },
+
+    'E->F': { throughput: 10 },
+    'F->E': { throughput: 10 },
   }
 }
 
 function initNodes (modelNetwork)/*: Network*/ {
   const network = {
     nodes: {},
-    edges: {}
+    edges: modelNetwork.edges
   }
   for (let address in modelNetwork.nodes) {
-    let node = network.nodes[address]
-
-    node.address = address
-    node.originators = {}
-    node.neighbors = {}
-    node.ogmSequence = 0
+    network.nodes[address] = {
+      address: address,
+      originators: {},
+      neighbors: {},
+      ogmSequence: 0
+    }
   }
 
   for (let edgeId in modelNetwork.edges) {
     let [addressA, addressB] = edgeId.split('->')
 
-    network.nodes[addressA].neighbors[addressB] = network.nodes[addressB]
+    network.nodes[addressA].neighbors[addressB] = {
+      address: addressB
+    }
   }
 
   return network
@@ -85,7 +110,7 @@ function broadcastOgm (
   self/*: Node*/
 ) {
   self.ogmSequence++
-  for (let neighbor in self.neighbors) {
+  for (let address in self.neighbors) {
     const ogm/*: OGM*/ = {
       type: 'OGM',
       sequence: self.ogmSequence,
@@ -94,7 +119,7 @@ function broadcastOgm (
       throughput: 255,
       timestamp: Date.now()
     }
-    sendPacket(self, neighbor, ogm)
+    sendPacket(self, address, ogm)
   }
 }
 
@@ -147,15 +172,25 @@ function updateOriginator (
   ogm/*: OGM*/
 ) {
   const originator = self.originators[ogm.originatorAddress]
+
+  // If this originator is already in the nodes originator list
   if (originator) {
+    // If the throughput from this ogm is better, replace the next hop
     if (originator.nextHop.throughput < ogm.throughput) {
       originator.nextHop = {
         address: ogm.senderAddress,
         throughput: ogm.throughput
       }
     }
+  // If this originator is not already in the nodes originator list, add it
   } else {
-
+    self.originators[ogm.originatorAddress] = {
+      address: ogm.originatorAddress,
+      nextHop: {
+        address: ogm.senderAddress,
+        throughput: ogm.throughput
+      }
+    }
   }
 }
 
@@ -167,16 +202,27 @@ function adjustOgm (
   * characteristic:
   *  - If this OGM traveled one hop so far (emitted by single hop
   *    neighbor) the path throughput metric equals the link throughput.
-  *  - For OGMs traversing more than hop the path throughput metric is
+  *  - For OGMs traversing more than one hop the path throughput metric is
   *    the smaller of the path throughput and the link throughput.
   */
-  const ownThroughput = network.edges[`${self.address}->${ogm.originatorAddress}`].throughput
+  const linkThroughput = network.edges[`${self.address}->${ogm.senderAddress}`].throughput
   if (self.neighbors[ogm.originatorAddress]) {
-    ogm.throughput = ownThroughput
+    ogm.throughput = linkThroughput
   } else {
-    ogm.throughput = Math.min(ownThroughput, ogm.throughput)
+    ogm.throughput = Math.min(linkThroughput, ogm.throughput)
   }
+
+  // Forward penalty
+  ogm.throughput = ogm.throughput * (1 - HOP_PENALTY)
 }
 
 const network = initNodes(modelNetwork)
+
 broadcastOgm(network.nodes['A'])
+broadcastOgm(network.nodes['B'])
+broadcastOgm(network.nodes['C'])
+broadcastOgm(network.nodes['D'])
+broadcastOgm(network.nodes['E'])
+broadcastOgm(network.nodes['F'])
+
+console.log(network)
