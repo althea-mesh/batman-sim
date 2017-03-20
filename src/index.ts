@@ -82,6 +82,36 @@ function dispatch (...args) {
   console.log(args[0])
 }
 
+class tokenBucket {
+  bucket: number
+  throughput: number
+  ticksPerSecond: number
+  constructor (
+    throughput: number,
+    ticksPerSecond: number = 10,
+  ) {
+    this.throughput = throughput
+    this.ticksPerSecond = ticksPerSecond
+    setInterval(this.tick, 1000 / ticksPerSecond)
+  }
+
+  sendBits (bits: number) {
+    const newBucket = this.bucket + bits
+    if (newBucket > this.throughput) {
+      this.bucket = this.throughput
+      return false
+    }
+    this.bucket = newBucket
+    return true
+  }
+
+  tick () {
+    if (this.bucket > 0) {
+      this.bucket -= this.throughput / this.ticksPerSecond
+    }
+  }
+}
+
 function initNodes (modelNetwork): Network {
   const network = {
     nodes: {},
