@@ -5,36 +5,12 @@
   "main": "index.js",
   "author": "",
   "license": "ISC",
-  "devDependencies": {
-    "babel-eslint": "^7.1.1",
-    "eslint": "^3.13.1",
-    "eslint-config-standard": "^6.2.1",
-    "eslint-plugin-promise": "^3.4.0",
-    "eslint-plugin-standard": "^2.0.1"
+  "scripts": {
+    "start": "tsc -w & http-server"
   },
-  "eslintConfig": {
-    "parser": "babel-eslint",
-    "parserOptions": {
-      "experimentalObjectRestSpread": true
-    },
-    "env": {
-      "node": true
-    },
-    "extends": [
-      "standard"
-    ],
-    "rules": {
-      "generator-star-spacing": 0,
-      "spaced-comment": 0,
-      "react/prop-types": 0,
-      "react/no-danger": 0,
-      "camelcase": 0,
-      "operator-linebreak": 0,
-      "comma-dangle": 0,
-      "semi": [
-        2,
-        "never"
-      ]
-    }
-  }
+  "devDependencies": {
+    "http-server": "^0.9.0",
+    "typescript": "^2.2.1"
+  },
+  "dependencies": {}
 }

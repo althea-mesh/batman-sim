@@ -1,11 +1,9 @@
-// @flow
 const TM = 1000
 const HOP_PENALTY = 0.058
-/*::
 
 type Network = {
   nodes: {
-    [key: string]: Node
+    [key: string]: Router
   },
   edges: {
     [key: string]: Edge
@@ -16,7 +14,7 @@ type Edge = {
   throughput: number
 }
 
-type Node = {
+type Router = {
   address: string,
   neighbors: {
     [key: string]: {
@@ -29,7 +27,8 @@ type Node = {
       nextHop: {
         address: string,
         throughput: number
-      }
+      },
+      ogmSequence: number
     }
   },
   ogmSequence: number
@@ -43,9 +42,6 @@ type OGM = {
   throughput: number,
   timestamp: number
 }
-
-*/
-
 
 //  /- B --> C -\
 // A             F
@@ -81,18 +77,26 @@ let modelNetwork = {
   }
 }
 
-function initNodes (modelNetwork)/*: Network*/ {
+// Used for logging events etc
+function dispatch (...args) {
+  console.log(args[0])
+}
+
+function initNodes (modelNetwork): Network {
   const network = {
     nodes: {},
     edges: modelNetwork.edges
   }
+
   for (let address in modelNetwork.nodes) {
-    network.nodes[address] = {
+    const node: Router = {
       address: address,
       originators: {},
       neighbors: {},
       ogmSequence: 0
     }
+
+    network.nodes[address] = node
   }
 
   for (let edgeId in modelNetwork.edges) {
@@ -107,11 +111,11 @@ function initNodes (modelNetwork)/*: Network*/ {
 }
 
 function broadcastOgm (
-  self/*: Node*/
+  self: Router
 ) {
   self.ogmSequence++
   for (let address in self.neighbors) {
-    const ogm/*: OGM*/ = {
+    const ogm: OGM = {
       type: 'OGM',
       sequence: self.ogmSequence,
       originatorAddress: self.address,
@@ -124,8 +128,8 @@ function broadcastOgm (
 }
 
 function rebroadcastOgm (
-  self/*: Node*/,
-  ogm/*: OGM*/
+  self: Router,
+  ogm: OGM
 ) {
   ogm.senderAddress = self.address
   for (let neighbor in self.neighbors) {
@@ -134,18 +138,19 @@ function rebroadcastOgm (
 }
 
 function sendPacket (
-  self/*: Node*/,
-  address/*: string*/,
-  payload/*: Object*/
+  self: Router,
+  address: string,
+  payload: Object
 ) {
   setTimeout(() => {
+    dispatch('sent packet')
     receivePacket(network.nodes[address], JSON.stringify(payload))
   }, Math.random() * 0.1 * TM)
 }
 
 function receivePacket (
-  self/*: Node*/,
-  payload/*: string*/
+  self: Router,
+  payload
 ) {
   payload = JSON.parse(payload)
   switch (payload.type) {
@@ -155,26 +160,31 @@ function receivePacket (
 }
 
 function handleOgm (
-  self/*: Node*/,
-  ogm/*: OGM*/
+  self: Router,
+  ogm: OGM
 ) {
   if (ogm.originatorAddress === self.address) {
     return
   }
 
   adjustOgm(self, ogm)
-  updateOriginator(self, ogm)
-  rebroadcastOgm(self, ogm)
+  if (!updateOriginator(self, ogm).sequenceTooLow) {
+    rebroadcastOgm(self, ogm)
+  }
 }
 
 function updateOriginator (
-  self/*: Node*/,
-  ogm/*: OGM*/
-) {
+  self: Router,
+  ogm: OGM
+)/*: { sequenceTooLow: boolean }*/ {
   const originator = self.originators[ogm.originatorAddress]
 
-  // If this originator is already in the nodes originator list
+  // If this originator is already in the node's originator list
   if (originator) {
+    // if the sequence is too low, stop processing
+    if (ogm.sequence <= originator.ogmSequence) {
+      return { sequenceTooLow: true }
+    }
     // If the throughput from this ogm is better, replace the next hop
     if (originator.nextHop.throughput < ogm.throughput) {
       originator.nextHop = {
@@ -182,9 +192,10 @@ function updateOriginator (
         throughput: ogm.throughput
       }
     }
-  // If this originator is not already in the nodes originator list, add it
+  // If this originator is not already in the node's originator list, add it
   } else {
     self.originators[ogm.originatorAddress] = {
+      ogmSequence: ogm.sequence,
       address: ogm.originatorAddress,
       nextHop: {
         address: ogm.senderAddress,
@@ -192,10 +203,11 @@ function updateOriginator (
       }
     }
   }
+  return { sequenceTooLow: false }
 }
 
 function adjustOgm (
-  self/*: Node*/,
+  self/*: Router*/,
   ogm/*: OGM*/
 ) {
   /* Update the received throughput metric to match the link
@@ -225,4 +237,4 @@ broadcastOgm(network.nodes['D'])
 broadcastOgm(network.nodes['E'])
 broadcastOgm(network.nodes['F'])
 
-console.log(network)
+setTimeout(() => console.log(network), 5000)
